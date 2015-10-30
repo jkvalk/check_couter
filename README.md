@@ -8,7 +8,7 @@ and alarm is set according to WARNING and CRITICAL levels.
 
 ##example command definition:
 
-```
+```C
 define command {
     command_name check_counter
     command_line /usr/lib/nagios/plugins/check_snmp -H '$HOSTADDRESS$' -C '$ARG1$' -o '$ARG2$' -w '$ARG3$' -c '$ARG4$'
@@ -17,7 +17,7 @@ define command {
 
 ##example service definition:
 
-```
+```C
 define service {
     host_name Host1
     service_description Gi0/1 ifInDiscards
