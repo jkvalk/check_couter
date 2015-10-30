@@ -6,18 +6,18 @@ last run information: timestamp and counter value.
 If existing cache file is encontered on next run, change rate is calculated
 and alarm is set according to WARNING and CRITICAL levels.
 
-##example command definition:
+##Example command definition:
 
-```C
+```
 define command {
     command_name check_counter
     command_line /usr/lib/nagios/plugins/check_snmp -H '$HOSTADDRESS$' -C '$ARG1$' -o '$ARG2$' -w '$ARG3$' -c '$ARG4$'
  }
 ```
 
-##example service definition:
+##Example service definition:
 
-```C
+```
 define service {
     host_name Host1
     service_description Gi0/1 ifInDiscards
