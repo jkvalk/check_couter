@@ -6,6 +6,10 @@ last run information: timestamp and counter value.
 If existing cache file is encontered on next run, change rate is calculated
 and alarm is set according to WARNING and CRITICAL levels.
 
+##Applications
+
+Typically, this plug-in is used to monitor counters like if(In|Out)Errors, if(In|Out)Discards and if(In|Out)Octets (for high-capacity interfaces, you need to use ifHC(In|Out)Octets).
+
 ##Example command definition:
 
 ```
