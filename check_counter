@@ -1,0 +1,193 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+#
+# check_counter plugin for Nagios
+# jkvalk@mail.ru
+#
+# This plugin checks an SNMP counter and creates a cache file to store
+# last run information: timestamp and counter value.
+#
+# If existing cache file is encontered on next run, change rate is calculated
+# and alarm is set according to WARNING and CRITICAL levels.
+#
+# example command definition:
+#
+# define command {
+#    command_name check_counter
+#    command_line /usr/lib/nagios/plugins/check_snmp -H '$HOSTADDRESS$' -C '$ARG1$' -o '$ARG2$' -w '$ARG3$' -c '$ARG4$'
+# }
+#
+# example service definition:
+#
+# define service {
+#    host_name Host1
+#    service_description Gi0/1 ifInDiscards
+#    check_command check_counter!public!1.3.6.1.2.1.2.2.1.13.1!1!2
+#    use generic-service
+#    notification_interval 0
+# }
+#
+
+require 'ap'
+require 'json'
+require 'snmp'
+require 'time'
+require 'timeout'
+require 'optparse'
+
+#
+# Exit codes.
+#
+OK = 0
+WARNING = 1
+CRITICAL = 2
+UNKNOWN = 3
+
+#
+# SNMP get time allowance.
+#
+# If the code does not complete, exception
+# is rised and UNKNOWN result is passed to Nagios.
+#
+TIMEOUT = 10 
+
+#
+# Set default command line options.
+#
+options = {
+  hostaddress: "<default HOSTADDRESS>",
+  oid: "<default OID>",
+  tmp: "/tmp",
+  warning: 0,
+  critical: 0
+}
+
+#
+# Parse command line options.
+#
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: check_counter -H HOSTADDRESS -o OID [options]"
+  opts.on( '-H', '--hostaddress HOSTADDRESS', 'Host IP or FQDN') do |o|
+      options[:hostaddress] = o
+  end
+  opts.on( '-o', '--oid OID', 'OID to check (must be an integer counter)') do |o|
+      options[:oid] = o
+  end
+  opts.on( '-C', '--community COMMUNITY', 'SNMP community') do |o|
+      options[:community] = o
+  end
+  opts.on( '-w', '--warning-rate RATE', 'WARNING counter increase rate (units/sec)') do |o|
+      options[:warning] = o.to_f
+  end
+  opts.on( '-c', '--critical-rate RATE', 'CRITICAL counter increase rate (units/sec)') do |o|
+      options[:critical] = o.to_f
+  end
+  opts.on( '-t', '--tmp DIR', 'Temporary files location') do |o|
+      options[:tmp] = o
+  end
+  opts.on( '-d', '--debug', 'Turn on debugging output') do |o|
+      options[:debug] = true
+  end
+  opts.on( '-h', '--help', 'Display this screen' ) do
+      puts opts
+      exit
+  end
+end
+
+begin
+  optparse.parse!
+rescue => e
+  puts "UNKNOWN | Problem with command line options: #{e}\n"
+  puts "Use -h or --help to see a list of valid options"
+  exit UNKNOWN
+end
+
+#
+# Find and parse cache from last run.
+#
+fn = options[:tmp] << "/" << options[:hostaddress] << "." << options[:oid]
+if File.exists?(fn)
+  begin
+    cache = JSON.parse( File.read(fn), symbolize_names: true )
+    cache[:counter] = cache[:counter].to_i
+    cache[:time] = Time.parse(cache[:time])
+  rescue => e
+    cache = nil
+  end
+else
+  cache = nil
+end
+
+#
+# SNMP get.
+#
+msg = ""
+result = UNKNOWN
+data = {}
+begin
+  value = Timeout.timeout(TIMEOUT) do
+    snmp = SNMP::Manager.new(Host: options[:hostaddress], Community: options[:community], MibModules: [])
+    value = snmp.get_value(options[:oid])
+    value = value.to_s.to_i
+    snmp.close
+    value
+  end
+rescue => e
+  puts "UNKNOWN - Exception during SNMP operation: #{e}"
+  exit UNKNOWN
+end
+
+#
+# Draw a decision.
+#
+begin
+  data = {
+    time: Time.now,
+    counter: value
+  }   
+  unless cache.nil?
+    if ( data[:counter] > cache[:counter] )
+      delta_t = data[:time] - cache[:time]
+      delta_c = data[:counter] - cache[:counter]
+      rate = (delta_c/delta_t).round(3)
+      if ( (rate < options[:critical]) && (rate >= options[:warning]) )
+        msg = "WARNING - Counter increasing at rate #{rate} per second"
+        result = WARNING
+      elsif ( (rate >= options[:critical]))
+        msg = "CRITICAL - Counter increasing at rate #{rate} per second"
+        result = CRITICAL
+      elsif ( (rate < options[:warning]))
+        msg = "OK - Counter increasing at rate #{rate} per second"
+        result = OK
+      else
+        msg = "UNKNOWN - Calculated a confusing rate of #{rate} per second"
+        result = UNKNOWN
+      end
+    elsif ( data[:counter] < cache[:counter] )
+      msg = "UNKNOWN - Counter has decreased. Cleared counters?"
+      result = UNKNOWN
+    else
+      msg = "OK - Counter standing still"
+      result = OK
+    end
+  else
+    msg = "UNKNOWN - No cache from last run"
+    result = UNKNOWN
+  end
+rescue => e
+  puts "UNKNOWN - Exception in plugin decisionmaking code: #{e}"
+  exit UNKNOWN
+end
+
+#
+# Trailer code.
+#
+begin
+  File.write fn, JSON.pretty_generate(data) unless data.empty?
+  puts msg
+  exit result
+rescue => e
+  puts "UNKNOWN - Exception in plugin trailer code: #{e}"
+  exit UNKNOWN
+end
+
