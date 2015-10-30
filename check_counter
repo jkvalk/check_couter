@@ -55,9 +55,9 @@ TIMEOUT = 10
 # Set default command line options.
 #
 options = {
-  hostaddress: "<default HOSTADDRESS>",
-  oid: "<default OID>",
-  tmp: "/tmp",
+  hostaddress: 'localhost',
+  community: 'public',
+  tmp: '/tmp',
   warning: 0,
   critical: 0
 }
@@ -121,9 +121,6 @@ end
 #
 # SNMP get.
 #
-msg = ""
-result = UNKNOWN
-data = {}
 begin
   value = Timeout.timeout(TIMEOUT) do
     snmp = SNMP::Manager.new(Host: options[:hostaddress], Community: options[:community], MibModules: [])
@@ -140,6 +137,9 @@ end
 #
 # Draw a decision.
 #
+msg = ""
+result = UNKNOWN
+
 begin
   data = {
     time: Time.now,
