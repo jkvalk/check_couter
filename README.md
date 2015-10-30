@@ -1,4 +1,4 @@
-#Nagios plugin to monitor SNMP counters diferentially
+#Nagios plugin to monitor SNMP counters differentially
 
 This plugin checks an SNMP counter and creates a cache file to store
 last run information: timestamp and counter value.
